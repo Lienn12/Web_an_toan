@@ -23,13 +23,15 @@ exports.checkAccessToken = async (req, res, next) => {
           'id',
           'full_name',
           'role',
-          'email'
+          'email',
+          'username',
         ]
       });
       user = user ? {
         id: user.id,
         full_name: user.full_name,
         email: user.email,
+        username: user.username,
         role: user.role,
         is_user: 1
       } : null
@@ -95,6 +97,7 @@ exports.checkRole = (roles = []) => {
             'full_name',
             'role',
             'email',
+            'username',
             'phone'
           ]
         });
@@ -102,9 +105,8 @@ exports.checkRole = (roles = []) => {
           id: user.id,
           full_name: user.full_name,
           email: user.email,
+          username: user.username,
           role: user.role,
-          is_user: 1,
-          investors_id: investors ? investors.id : null
         } : null
         req.user = user;
       }

@@ -1,0 +1,36 @@
+'use strict';
+const { Sequelize, DataTypes } = require('sequelize');
+
+module.exports = (sequelize) => {
+  const Game = sequelize.define('Game', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true
+    },
+    game_name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    status: {
+      type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
+      defaultValue: 'ACTIVE'
+    },
+    deleted: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    }
+  }, {
+    tableName: 'games',
+    timestamps: true,
+    createdAt: 'created_date',
+    updatedAt: 'updated_date'
+  });
+
+  return Game;
+};
