@@ -1,3 +1,8 @@
+#Nhóm 9: 
+- Nguyễn Văn Tú 22810310083
+- Nguyễn Thị Liên 22810310123
+- Mai Văn Hoàng 22810310128
+---
 # eSports Ranking System với Blockchain & JWT Security Analysis
 
 ## Giới thiệu
