@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import models from '../models/index.js';
-import * as jwt_token from '../middlewares/jwt_token.js';
+import * as jwt_token from '../middlewares/jwt_token1.js';
 import * as MailHelper from '../helper/MailHelper.js';
 
 export const register = async (data) => {
