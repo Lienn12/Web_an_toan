@@ -9,6 +9,9 @@ import defineSeason from './Season.js';
 import defineTournament from './Tournament.js';
 import defineRanking from './Ranking.js';
 import defineRankingBoard from './RankingBoard.js';
+import defineParticipant from './Participant.js';
+import defineMatch from './Match.js';
+
 
 // Khởi tạo models
 const User = defineUser(sequelize, DataTypes);
@@ -19,8 +22,11 @@ const Season = defineSeason(sequelize, DataTypes);
 const Tournament = defineTournament(sequelize, DataTypes);
 const Ranking = defineRanking(sequelize, DataTypes);
 const RankingBoard = defineRankingBoard(sequelize, DataTypes);
+const Participant = defineParticipant(sequelize, DataTypes);
+const Match = defineMatch(sequelize, DataTypes);
 
-export { sequelize, Sequelize, User, user_otp, Game, Team, Season, Tournament, Ranking, RankingBoard };
+
+export { sequelize, Sequelize, User, user_otp, Game, Team, Season, Tournament, Ranking, RankingBoard, Participant, Match };
 
 export default {
   sequelize,
@@ -29,8 +35,10 @@ export default {
   user_otp,
   Team,
   Game,
-  Season
+  Season,
   Tournament,
   Ranking,
-  RankingBoard
+  RankingBoard,
+  Participant,
+  Match
 };
