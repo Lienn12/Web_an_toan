@@ -99,6 +99,9 @@ router.post('/matches/:match_id/update-score', tournamentController.updateMatchS
 router.post('/tournaments/:tournament_id/next-round', tournamentController.startNextRound);
 
 // ghi bxh len blockchain
-router.post('/:tournament_id/record-ranking', checkRole([roles.ADMIN]), tournamentController.writeLeaderboardToBlockchain);
+router.post('/:tournament_id/:round_number/record-ranking', checkRole([roles.ADMIN]), tournamentController.writeLeaderboardToBlockchain);
+
+// lấy ra bxh từ blockchain
+router.get('/:tournament_id/:round_number/matches', tournamentController.getMatchesByTournamentAndRound);
 
 export default router;
