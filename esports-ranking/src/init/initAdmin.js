@@ -14,7 +14,7 @@ const provider = new ethers.JsonRpcProvider(rpcUrl);
  * @param {string} walletAddress - Địa chỉ ví cần nạp
  * @param {string} amountEth - Số lượng ETH (dạng chuỗi)
  */
-async function fundWalletOnAnvil(walletAddress, amountEth = "1000000000000") {
+export const fundWalletOnAnvil = async (walletAddress, amountEth = "1000000000000") => {
   try {
     console.log(`[ANVIL SYNC] Bắt đầu nạp ${amountEth} ETH cho ví ${walletAddress}...`);
 
