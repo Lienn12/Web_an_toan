@@ -1,5 +1,6 @@
 // File: controllers/tournament.controller.js
 import * as tournamentService from '../services/TournamentService.js';
+import { updateMatchScoreOnChain } from '../services/BlockchainService.js';
 import { responseSuccess, responseWithError } from '../response/ResponseSuccess.js';
 import { ErrorCodes } from '../constant/ErrorCodes.js';
 import models from '../models/index.js';
@@ -271,16 +272,27 @@ export const startTournament = async (req, res) => {
   try {
     const { id: tournament_id } = req.params;
 
-    // 1. Kiểm tra giải đấu (Lấy POJO để kiểm tra logic)
+    // 1. Kiểm tra giải đấu
     const tournament = await tournamentService.findById(tournament_id);
     if (!tournament) {
-      return res.json(responseWithError(ErrorCodes.ERROR_CODE_DATA_NOT_EXIST, 'Giải đấu không tồn tại.'));
-    }
-    if (tournament.status !== 'PENDING') {
-      return res.json(responseWithError(ErrorCodes.ERROR_REQUEST_DATA_INVALID, 'Giải đấu đã bắt đầu hoặc kết thúc.'));
+      return res.json(
+        responseWithError(
+          ErrorCodes.ERROR_CODE_DATA_NOT_EXIST,
+          'Giải đấu không tồn tại.'
+        )
+      );
     }
 
-    // 2. YÊU CẦU: Từ chối tất cả request 'pending'
+    if (tournament.status !== 'PENDING') {
+      return res.json(
+        responseWithError(
+          ErrorCodes.ERROR_REQUEST_DATA_INVALID,
+          'Giải đấu đã bắt đầu hoặc kết thúc.'
+        )
+      );
+    }
+
+    // 2. Từ chối tất cả request 'PENDING'
     const rejectedCount = await tournamentService.updateParticipantStatusByTournament(
       tournament_id,
       'PENDING',
@@ -288,15 +300,23 @@ export const startTournament = async (req, res) => {
     );
     console.log(`[Tournament ${tournament_id}] Đã tự động từ chối ${rejectedCount} yêu cầu đang chờ.`);
 
-    // 3. Lấy danh sách thi đấu CHÍNH THỨC
-    const roster = await tournamentService.getParticipantsByStatus(tournament_id, 'APPROVED'); // Sửa 'approved' thành 'APPROVED' cho nhất quán
+    // 3. Lấy danh sách đội đã duyệt ('APPROVED')
+    const roster = await tournamentService.getParticipantsByStatus(
+      tournament_id,
+      'APPROVED'
+    );
 
     // 4. Kiểm tra logic nghiệp vụ
     if (roster.length < 2) {
-      return res.json(responseWithError(ErrorCodes.ERROR_REQUEST_DATA_INVALID, `Giải đấu cần ít nhất 2 đội đã được duyệt. Hiện tại: ${roster.length} đội.`));
+      return res.json(
+        responseWithError(
+          ErrorCodes.ERROR_REQUEST_DATA_INVALID,
+          `Giải đấu cần ít nhất 2 đội đã được duyệt. Hiện tại: ${roster.length} đội.`
+        )
+      );
     }
 
-    // 5. SINH VÒNG 1 (Logic shuffle... giữ nguyên)
+    // 5. Sinh Vòng 1 (xáo trộn ngẫu nhiên)
     const shuffledRoster = roster.sort(() => 0.5 - Math.random());
     let matchesData = [];
     let byeTeam = null;
@@ -311,11 +331,12 @@ export const startTournament = async (req, res) => {
           status: 'PENDING'
         });
       } else {
+        // Nếu số đội lẻ, đội cuối cùng nhận "bye"
         byeTeam = shuffledRoster[i];
       }
     }
 
-    // 6. Xử lý "Bye" (Logic xử lý "Bye"... giữ nguyên)
+    // 6. Xử lý đội "Bye" (tự động thắng vòng 1)
     if (byeTeam) {
       matchesData.push({
         tournament_id: tournament_id,
@@ -325,39 +346,113 @@ export const startTournament = async (req, res) => {
         winner_participant_id: byeTeam.id,
         status: 'COMPLETED'
       });
-      
+
       const byeParticipant = await tournamentService.findParticipantById(byeTeam.id);
       await byeParticipant.update({ has_received_bye: true });
-      
-      // (Bỏ comment khi bạn đã implement blockchain service)
-      // await updateScoreOnContract(byeTeam.wallet_address, 2); 
-      console.log(`[Tournament ${tournament_id}] Đội ${byeTeam.team_name} nhận "Bye" và +2 điểm.`);
+
+      // Ghi điểm blockchain cho đội nhận bye
+      try {
+        await updateMatchScoreOnChain(byeMatch.id, 2, 0);
+        console.log(
+          `[Tournament ${tournament_id}] Đội ${byeTeam.team_name} nhận "Bye" và +2 điểm (đã ghi blockchain).`
+        );
+      } catch (bcErr) {
+        console.error('Blockchain error (bye team):', bcErr);
+      }
     }
 
-    // 7. Lưu các trận đấu Vòng 1 vào DB
+    // 7. Lưu các trận đấu vòng 1 vào DB
     await tournamentService.createMatches(matchesData);
 
-    // 8. (ĐÂY LÀ PHẦN SỬA LỖI)
-    // 'tournament' là POJO, không có hàm .update().
-    // Chúng ta phải lấy Instance Sequelize thật sự.
+    // 8. Cập nhật trạng thái giải đấu sang ACTIVE
     const tournamentInstance = await models.Tournament.findByPk(tournament_id);
     if (!tournamentInstance) {
-       return res.json(responseWithError(ErrorCodes.ERROR_CODE_SYSTEM_ERROR, 'Lỗi: Không tìm thấy instance giải đấu để cập nhật.'));
+      return res.json(
+        responseWithError(
+          ErrorCodes.ERROR_CODE_SYSTEM_ERROR,
+          'Không tìm thấy instance giải đấu để cập nhật.'
+        )
+      );
     }
 
-    // 9. Cập nhật trạng thái giải đấu VỚI INSTANCE
     await tournamentService.updateTournamentStatus(tournamentInstance, 'ACTIVE', 1);
 
-    return res.json(responseSuccess({
-      message: 'Giải đấu đã bắt đầu!',
-      matches_created: matchesData.length,
-      auto_rejected: rejectedCount,
-      approved_teams: roster.length
-    }));
-
+    // 9. Trả về kết quả thành công
+    return res.json(
+      responseSuccess({
+        message: 'Giải đấu đã bắt đầu!',
+        matches_created: matchesData.length,
+        auto_rejected: rejectedCount,
+        approved_teams: roster.length
+      })
+    );
   } catch (error) {
     console.error('startTournament error', error);
-    // Cân nhắc dùng Transaction ở đây
+    return res.json(
+      responseWithError(ErrorCodes.ERROR_CODE_SYSTEM_ERROR, error.message)
+    );
+  }
+};
+
+export const getTournamentRoundsResult = async (req, res) => {
+  try {
+    const { id: tournament_id } = req.params;
+
+    // Lấy tất cả các trận đấu theo giải, sắp theo vòng
+    const matches = await models.Match.findAll({
+      where: { tournament_id },
+      include: [
+        { model: models.Participant, as: 'teamA', attributes: ['id', 'team_name', 'wallet_address'] },
+        { model: models.Participant, as: 'teamB', attributes: ['id', 'team_name', 'wallet_address'] },
+        { model: models.Participant, as: 'winner', attributes: ['id', 'team_name', 'wallet_address'] }
+      ],
+      order: [['round_number', 'ASC'], ['id', 'ASC']]
+    });
+
+    if (!matches.length) {
+      return res.json(responseWithError(ErrorCodes.ERROR_CODE_DATA_NOT_EXIST, 'Chưa có trận đấu nào.'));
+    }
+
+    // Gom nhóm theo round_number
+    const rounds = {};
+    for (const match of matches) {
+      const round = match.round_number;
+      if (!rounds[round]) rounds[round] = [];
+
+      // Lấy điểm mới nhất từ blockchain (cho từng đội)
+      const teamAScore = match.teamA?.wallet_address
+        ? await getScoreFromContract(match.teamA.wallet_address)
+        : 0;
+      const teamBScore = match.teamB?.wallet_address
+        ? await getScoreFromContract(match.teamB.wallet_address)
+        : 0;
+
+      // Định dạng dữ liệu
+      rounds[round].push({
+        match_id: match.id,
+        status: match.status,
+        winner: match.winner?.team_name || null,
+        teams: [
+          {
+            id: match.teamA?.id,
+            name: match.teamA?.team_name,
+            wallet: match.teamA?.wallet_address,
+            blockchain_score: teamAScore
+          },
+          {
+            id: match.teamB?.id,
+            name: match.teamB?.team_name,
+            wallet: match.teamB?.wallet_address,
+            blockchain_score: teamBScore
+          }
+        ]
+      });
+    }
+
+    // Trả về kết quả
+    return res.json(responseSuccess(rounds, 'Lấy kết quả từng vòng thành công.'));
+  } catch (error) {
+    console.error('getTournamentRoundsResult error', error);
     return res.json(responseWithError(ErrorCodes.ERROR_CODE_SYSTEM_ERROR, error.message));
   }
 };

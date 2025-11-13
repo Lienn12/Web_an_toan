@@ -197,12 +197,6 @@ export const updateTournamentStatus = async (tournament, new_status, new_round) 
 
 
 
-
-
-
-
-
-
 //
 export const findParticipantsByIds = async (participant_ids) => {
   const participants = await models.Participant.findAll({
@@ -214,4 +208,11 @@ export const findParticipantsByIds = async (participant_ids) => {
     attributes: ['id', 'team_name'] // Chỉ cần lấy ID và Tên
   });
   return participants;
+};
+
+export const findParticipantsByRound = async (tournament_id, round_number) => {
+  return await models.Participant.findAll({
+    where: { tournament_id, round_number },
+    raw: true
+  });
 };
