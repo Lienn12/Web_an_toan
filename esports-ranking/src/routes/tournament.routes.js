@@ -1,6 +1,6 @@
 import express from 'express';
 import * as tournamentController from '../controllers/TournamentController.js';
-import { checkRole } from '../middlewares/jwt_token.js';
+import { checkAccessToken, checkRole } from '../middlewares/jwt_token.js';
 import roles from '../constant/roles.js';
 
 const router = express.Router();
