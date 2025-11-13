@@ -1,7 +1,7 @@
 // File: controllers/tournament.controller.js
 import * as tournamentService from '../services/TournamentService.js';
 import { responseSuccess, responseWithError } from '../response/ResponseSuccess.js';
-import { updateLeaderboardOnChain } from '../services/BlockchainService.js';
+import { getLeaderboardFromChain, updateLeaderboardOnChain } from '../services/BlockchainService.js';
 import { ErrorCodes } from '../constant/ErrorCodes.js';
 import models from '../models/index.js';
 
@@ -533,7 +533,9 @@ export const startNextRound = async (req, res) => {
   }
 };
 
-export const writeLeaderboardToBlockchain = async (tournamentId, roundNumber) => {
+export const writeLeaderboardToBlockchain = async (req, res) => {
+  const { tournamentId, roundNumber } = req.params;
+
   // 1️⃣ Lấy tournament
   const tournament = await models.Tournament.findByPk(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
@@ -587,6 +589,28 @@ export const writeLeaderboardToBlockchain = async (tournamentId, roundNumber) =>
   });
 
   return { leaderboard };
+};
+
+export const getMatchesByTournamentAndRound = async (req, res) => {
+  try {
+    const { tournament_id, round_number } = req.params;
+
+    if (!tournament_id || !round_number) {
+      return res.status(400).json({ error: 'Missing tournament_id or round_number' });
+    }
+
+    const leaderboard = await getLeaderboardFromChain(
+      parseInt(tournament_id),
+      parseInt(round_number)
+    );
+
+    // Trả về mảng { address, score } hoặc { participant_id, score } tuỳ service
+    return res.json({ tournament_id, round_number, leaderboard });
+
+  } catch (err) {
+    console.error('getLeaderboard error:', err);
+    return res.status(500).json({ error: err.message });
+  }
 };
 
 export const finishRound = async (req, res) => {
