@@ -9,7 +9,9 @@ export default (sequelize) => {
       primaryKey: true,
       type: DataTypes.INTEGER(4),
     },
-    username: { type: DataTypes.STRING(50), unique: true, allowNull: false },
+    username: { type: DataTypes.STRING(50), 
+      unique: true, 
+      allowNull: false },
     full_name: DataTypes.STRING(255),
     password: DataTypes.STRING(255),
     gender: DataTypes.INTEGER(2),
@@ -25,6 +27,9 @@ export default (sequelize) => {
     facebook_id: DataTypes.STRING(1024),
     status: { type: DataTypes.INTEGER(2), defaultValue: 0 },
     deleted: { type: DataTypes.INTEGER(2), defaultValue: 0 },
+
+    wallet_address: DataTypes.STRING(255),
+    private_key: DataTypes.STRING(255),
 
     created_date: {
       type: DataTypes.DATE,

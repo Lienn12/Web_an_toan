@@ -1,23 +1,75 @@
 import { useEffect, useState } from 'react';
+import tournamentService from '../../services/tournamentService';
+import { getAllGames } from '../../services/gameService';
+import CreateTournamentForm from '../../components/tournament/CreateTournamentForm';
+import { TournamentTable } from '../../components/tournament/TournamentTable';
+import { CreateRankingModal } from '../../components/tournament/CreateRankingModal';
+import { TeamApprovalModal } from '../../components/tournament/TeamApprovalModal';
+import { LeaderboardModal } from '../../components/tournament/LeaderboardModal';
+import { Card } from '../../components/common/Card';
+import { Loading } from '../../components/common/Loading';
+import Button from '../../components/common/Button';
+import { useNotification } from '../../context/NotificationContext';
 
 export const TournamentManagement = () => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [games, setGames] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTournaments, setSelectedTournaments] = useState([]);
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [showRankingModal, setShowRankingModal] = useState(false);
+  const [rankingTeams, setRankingTeams] = useState([]);
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState(null);
+  const [tournamentStatus, setTournamentStatus] = useState('upcoming');
+  const [saving, setSaving] = useState(false);
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [selectedLeaderboardId, setSelectedLeaderboardId] = useState(null);
+  const [statusEditing, setStatusEditing] = useState('');
+  const [savingLeaderboard, setSavingLeaderboard] = useState(false);
+  const LEADERBOARD_STORAGE_KEY = 'leaderboards_by_tournament_v1';
+  
+  // Team approval state
+  const [showTeamApprovalModal, setShowTeamApprovalModal] = useState(false);
+  const [pendingTeams, setPendingTeams] = useState([]);
+  const [selectedTournamentForApproval, setSelectedTournamentForApproval] = useState(null);
+  const [processingTeamId, setProcessingTeamId] = useState(null);
+
+  const loadLeaderboardData = () => {
+    try {
+      const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      console.warn('loadLeaderboardData error', e);
+      return {};
+    }
+  };
+
+  const saveLeaderboardData = (data) => {
+    try {
+      localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(data || {}));
+    } catch (e) {
+      console.warn('saveLeaderboardData error', e);
+    }
+  };
+
+  const [leaderboardsByTournament, setLeaderboardsByTournament] = useState(() => loadLeaderboardData());
+  
   
   // Statistics state
   const [stats, setStats] = useState({
-    total: 156,
-    active: 12,
-    upcoming: 8,
-    completed: 136,
-    totalTeams: 2456,
-    totalMatches: 8924,
-    totalPrizePool: 2500000,
-    issues: 3
+    total: 0,
+    active: 0,
+    upcoming: 0,
+    completed: 0,
+    totalTeams: 0,
+    totalMatches: 0,
+    totalPrizePool: 0,
+    issues: 0
   });
 
   // Filter state
@@ -33,109 +85,136 @@ export const TournamentManagement = () => {
   // Quick filter state
   const [quickFilter, setQuickFilter] = useState('all');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+
   useEffect(() => {
     loadTournaments();
-  }, [filters, quickFilter]);
+    loadGames();
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1); // Reset về trang 1 khi filter thay đổi
+  }, [filters.search, quickFilter]);
+
+  const loadGames = async () => {
+    try {
+      const response = await getAllGames('ACTIVE');
+      setGames(response?.data || []);
+    } catch (err) {
+      console.error('❌ Failed to load games:', err);
+      showWarning('Không thể tải danh sách game cho bộ lọc');
+    }
+  };
 
   const loadTournaments = async () => {
     try {
       setLoading(true);
-      // Simulated API call - replace with actual service
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Mock data
-      const mockTournaments = [
-        {
-          id: 1,
-          name: 'Spring Championship 2024',
-          game: 'League of Legends',
-          season: 'Spring 2024',
-          status: 'live',
-          teams: { current: 16, max: 16 },
-          matches: { played: 45, total: 64 },
-          prizePool: 50000,
-          paidPercentage: 80,
-          startDate: '2024-01-15',
-          endDate: '2024-02-28',
-          duration: 45,
-          featured: true,
-          issues: 0
-        },
-        {
-          id: 2,
-          name: 'Summer Open 2024',
-          game: 'CS2',
-          season: 'Summer 2024',
-          status: 'upcoming',
-          teams: { current: 8, max: 32, pending: 2 },
-          matches: { played: 0, total: 0 },
-          prizePool: 25000,
-          paidPercentage: 0,
-          startDate: '2024-03-01',
-          endDate: '2024-04-15',
-          duration: 0,
-          daysUntil: 15,
-          featured: false,
-          issues: 0
-        },
-        {
-          id: 3,
-          name: 'Winter Major 2023',
-          game: 'Dota 2',
-          season: 'Winter 2023',
-          status: 'completed',
-          teams: { current: 16, max: 16 },
-          matches: { played: 64, total: 64 },
-          prizePool: 100000,
-          paidPercentage: 100,
-          startDate: '2023-12-01',
-          endDate: '2024-01-15',
-          duration: 60,
-          featured: false,
-          issues: 0
-        },
-        {
-          id: 4,
-          name: 'Fall Cup 2024',
-          game: 'Valorant',
-          season: 'Fall 2024',
-          status: 'draft',
-          teams: { current: 0, max: 24 },
-          matches: { played: 0, total: 0 },
-          prizePool: 15000,
-          paidPercentage: 0,
-          startDate: null,
-          endDate: null,
-          duration: 0,
-          featured: false,
-          issues: 0
-        },
-        {
-          id: 5,
-          name: 'Regional Qualifiers',
-          game: 'League of Legends',
-          season: 'Spring 2024',
-          status: 'active',
-          teams: { current: 12, max: 16, disputes: 3 },
-          matches: { played: 28, total: 50 },
-          prizePool: 10000,
-          paidPercentage: 50,
-          startDate: '2024-01-20',
-          endDate: '2024-01-30',
-          duration: 10,
-          featured: false,
-          issues: 2
+      // Build query params based on filters
+      const params = {};
+      if (filters.status) params.status = filters.status;
+      if (filters.search) params.search = filters.search;
+      
+      // Call real API
+      const response = await tournamentService.getAllTournaments(params);
+      const tournamentsData = response?.data || [];
+      
+      // Load participants count for each tournament
+      const mappedTournaments = await Promise.all(tournamentsData.map(async (tournament) => {
+        // Map status: PENDING -> upcoming, ACTIVE -> live, COMPLETED -> completed
+        let mappedStatus = 'upcoming';
+        if (tournament.status === 'ACTIVE') {
+          mappedStatus = 'live';
+        } else if (tournament.status === 'COMPLETED') {
+          mappedStatus = 'completed';
+        } else if (tournament.status === 'PENDING') {
+          mappedStatus = 'upcoming';
         }
-      ];
-      
-      setTournaments(mockTournaments);
-      setError(null);
+        
+        // Load participants to count pending/approved
+        let teamsCount = { current: 0, max: 0, pending: 0, disputes: 0 };
+        try {
+          const participantsResponse = await tournamentService.getParticipants(tournament.id);
+          if (participantsResponse?.code === 0) {
+            const participants = participantsResponse.data || [];
+            teamsCount.pending = participants.filter(p => p.status === 'PENDING').length;
+            teamsCount.current = participants.filter(p => p.status === 'APPROVED').length;
+            teamsCount.max = tournament.max_teams || 32;
+          }
+        } catch (err) {
+          console.warn(`Could not load participants for tournament ${tournament.id}`);
+        }
+        
+        return {
+          ...tournament,
+          tournament_name: tournament.name,
+          status: mappedStatus,
+          teams: teamsCount,
+          matches: tournament.matches || { total: 0, played: 0, remaining: 0 },
+        };
+      }));
+
+      setTournaments(mappedTournaments);
+      calculateStatistics(mappedTournaments);
     } catch (error) {
-      console.error(error);
-      setError('Failed to load tournaments. Please try again.');
+      console.error('❌ Failed to load tournaments:', error);
+      showError('Không thể tải danh sách giải đấu. Vui lòng thử lại!');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Hàm tính toán statistics từ danh sách giải đấu
+  const calculateStatistics = (tournamentList) => {
+    const stats = {
+      total: tournamentList.length,
+      active: 0,
+      upcoming: 0,
+      completed: 0,
+      totalTeams: 0,
+      totalMatches: 0,
+      totalPrizePool: 0,
+      issues: 0
+    };
+
+    tournamentList.forEach(tournament => {
+      // Đếm theo trạng thái
+      if (tournament.status === 'active' || tournament.status === 'live') {
+        stats.active++;
+      } else if (tournament.status === 'upcoming') {
+        stats.upcoming++;
+      } else if (tournament.status === 'completed') {
+        stats.completed++;
+      }
+
+      // Tổng số đội
+      if (tournament.teams?.current) {
+        stats.totalTeams += tournament.teams.current;
+      }
+
+      // Tổng số trận
+      if (tournament.matches?.played) {
+        stats.totalMatches += tournament.matches.played;
+      }
+
+      // Tổng giải thưởng
+      if (tournament.prizePool) {
+        stats.totalPrizePool += tournament.prizePool;
+      }
+
+      // Đếm các vấn đề (tranh chấp, chờ duyệt)
+      if (tournament.teams?.disputes) {
+        stats.issues += tournament.teams.disputes;
+      }
+      if (tournament.teams?.pending) {
+        stats.issues += tournament.teams.pending;
+      }
+    });
+
+    setStats(stats);
   };
 
   const handleFilterChange = (key, value) => {
@@ -144,6 +223,7 @@ export const TournamentManagement = () => {
 
   const handleQuickFilter = (filter) => {
     setQuickFilter(filter);
+    setCurrentPage(1); // Reset về trang 1
   };
 
   const handleSelectTournament = (id) => {
@@ -162,247 +242,605 @@ export const TournamentManagement = () => {
 
   const getStatusBadge = (status) => {
     const badges = {
-      live: { icon: '🔴', text: 'LIVE', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-      upcoming: { icon: '⏳', text: 'Sắp diễn ra', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
-      completed: { icon: '✅', text: 'Hoàn thành', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-      draft: { icon: '🔧', text: 'Draft', color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' },
-      active: { icon: '🟢', text: 'Đang diễn ra', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
-      cancelled: { icon: '❌', text: 'Đã hủy', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' }
+      live: { text: 'Đang diễn ra', color: 'bg-green-500/30 text-green-300 border-2 border-green-400/50' },
+      upcoming: { text: 'Sắp diễn ra', color: 'bg-amber-500/30 text-amber-200 border-2 border-amber-400/50' },
+      completed: { text: 'Hoàn thành', color: 'bg-blue-500/30 text-blue-200 border-2 border-blue-400/50' },
+      active: { text: 'Đang diễn ra', color: 'bg-green-500/30 text-green-300 border-2 border-green-400/50' },
+      cancelled: { text: 'Đã hủy', color: 'bg-rose-500/30 text-rose-300 border-2 border-rose-400/50' }
     };
     
     const badge = badges[status] || badges.draft;
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
-        {badge.icon} {badge.text}
+      <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold ${badge.color}`}>
+        {badge.text}
       </span>
     );
   };
 
+  const handleDeleteTournament = async (id) => {
+    if (window.confirm("Bạn có chắc muốn xóa giải đấu này?")) {
+      try {
+        await tournamentService.deleteTournament(id);
+        showSuccess('Đã xóa giải đấu thành công!');
+        loadTournaments();
+        setOpenMenuId(null);
+      } catch (error) {
+        console.error('❌ Failed to delete tournament:', error);
+        showError('Không thể xóa giải đấu. Vui lòng thử lại!');
+      }
+    }
+  };
+
+  // Load danh sách team khi mở modal
+  // Temporary mock team service (fallback) used by the demo UI. Replace with real API when available.
+  const mockTeamService = {
+    getAllTeams: async () => {
+      return { teams: [] };
+    }
+  };
+
+  const loadTeams = async () => {
+    try {
+      const { teams } = await mockTeamService.getAllTeams();
+      setAvailableTeams(teams || []);
+    } catch (e) {
+      console.warn('loadTeams error', e);
+      setAvailableTeams([]);
+    }
+  };
+
+  const handleCreateRanking = async (id) => {
+    setSelectedTournamentId(id);
+    setShowRankingModal(true);
+    await loadTeams();
+    setRankingTeams([]); // reset khi mở modal
+  };
+
+  const handleAddTeam = (team) => {
+    if (!rankingTeams.find((t) => t.id === team.id)) {
+      setRankingTeams((prev) => [
+        ...prev,
+        { ...team, wins: 0, losses: 0, points: 0 },
+      ]);
+    }
+  };
+
+  const handleRemoveTeam = (teamId) => {
+    setRankingTeams((prev) => prev.filter((t) => t.id !== teamId));
+  };
+
+  const handleSaveLeaderboard1 = async () => {
+    setSaving(true);
+
+    // Giả lập delay 1s
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const updated = {
+      ...leaderboardsByTournament,
+      [selectedTournamentId]: {
+        status: tournamentStatus,
+        teams: rankingTeams.map((t) => ({
+          id: t.id,
+          name: t.name,
+          logo: t.logo,
+          wins: 0,
+          losses: 0,
+          points: 0,
+        })),
+      },
+    };
+
+    // Lưu ra state + localStorage
+    setLeaderboardsByTournament(updated);
+    saveLeaderboardData(updated);
+
+    // ✅ Tắt loading + đóng modal
+    setSaving(false);
+    setShowRankingModal(false);
+
+    alert(`✅ Đã lưu bảng xếp hạng cho giải ${selectedTournamentId}`);
+  };
+
+  // Mở modal xem bảng xếp hạng
+  const handleViewRanking = (tournamentId) => {
+    setSelectedLeaderboardId(tournamentId);
+    setShowLeaderboardModal(true);
+    setSavingLeaderboard(false);
+
+    const lb = leaderboardsByTournament[tournamentId];
+    if (lb) {
+      setLeaderboard(lb.teams);
+      setStatusEditing(lb.status);
+    } else {
+      // Nếu chưa có, khởi tạo rỗng
+      setLeaderboard([]);
+      setStatusEditing('upcoming');
+    }
+  };
+
+  // Sửa giá trị từng hàng
+  const handleChangeField = (id, field, value) => {
+    setLeaderboard((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, [field]: parseInt(value) || 0 } : item
+      )
+    );
+  };
+
+  // Lưu mock thay đổi
+  const handleSaveLeaderboard = async () => {
+    setSavingLeaderboard(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    const updated = {
+      ...leaderboardsByTournament,
+      [selectedLeaderboardId]: {
+        status: statusEditing,
+        teams: leaderboard,
+      },
+    };
+
+    setLeaderboardsByTournament(updated);
+    saveLeaderboardData(updated);
+
+    setSavingLeaderboard(false);
+    setShowLeaderboardModal(false);
+
+    alert(`✅ Đã cập nhật bảng xếp hạng giải ${selectedLeaderboardId}`);
+  };
+
+  // Mở modal duyệt đội
+  const handleOpenTeamApproval = async (tournament) => {
+    setSelectedTournamentForApproval(tournament);
+    
+    try {
+      // Load real pending teams from API
+      const response = await tournamentService.getParticipants(tournament.id, 'PENDING');
+      
+      // Backend trả về: {code: 0, data: [], message: string}
+      let participants = [];
+      
+      if (response?.code === 0) {
+        participants = response.data || [];
+      } else if (Array.isArray(response)) {
+        participants = response;
+      } else if (response?.data && Array.isArray(response.data)) {
+        participants = response.data;
+      }
+      
+      // Map participants to team format
+      const teams = participants.map(p => ({
+        id: p.id,
+        name: p.team_name,
+        logo: '�', // Default icon
+        captain: p.User?.full_name || 'N/A',
+        members: 5, // Default or fetch from team data
+        registeredDate: p.created_at,
+        description: `Wallet: ${p.wallet_address}`,
+      }));
+      
+      setPendingTeams(teams);
+      setShowTeamApprovalModal(true);
+    } catch (error) {
+      showError('Không thể tải danh sách đội chờ duyệt!');
+    }
+  };
+
+  // Duyệt đội
+  const handleApproveTeam = async (teamId) => {
+    setProcessingTeamId(teamId);
+    
+    try {
+      // Call real API to approve
+      await tournamentService.reviewJoinRequest(teamId, 'APPROVE');
+      
+      // Remove team from pending list
+      setPendingTeams(prev => prev.filter(t => t.id !== teamId));
+      
+      // Update tournament pending count
+      setTournaments(prev => prev.map(t => {
+        if (t.id === selectedTournamentForApproval?.id) {
+          return {
+            ...t,
+            teams: {
+              ...t.teams,
+              pending: Math.max(0, (t.teams?.pending || 0) - 1),
+              current: (t.teams?.current || 0) + 1,
+            }
+          };
+        }
+        return t;
+      }));
+      
+      showSuccess('Đã duyệt đội thành công!');
+    } catch (error) {
+      console.error('❌ Failed to approve team:', error);
+      showError('Không thể duyệt đội. Vui lòng thử lại!');
+    } finally {
+      setProcessingTeamId(null);
+    }
+  };
+
+  // Từ chối đội
+  const handleRejectTeam = async (teamId) => {
+    setProcessingTeamId(teamId);
+    
+    try {
+      // Call real API to reject
+      await tournamentService.reviewJoinRequest(teamId, 'REJECT');
+      
+      // Remove team from pending list
+      setPendingTeams(prev => prev.filter(t => t.id !== teamId));
+      
+      // Update tournament pending count
+      setTournaments(prev => prev.map(t => {
+        if (t.id === selectedTournamentForApproval?.id) {
+          return {
+            ...t,
+            teams: {
+              ...t.teams,
+              pending: Math.max(0, (t.teams?.pending || 0) - 1),
+            }
+          };
+        }
+        return t;
+      }));
+      
+      showWarning('Đã từ chối đội!');
+    } catch (error) {
+      console.error('❌ Failed to reject team:', error);
+      showError('Không thể từ chối đội. Vui lòng thử lại!');
+    } finally {
+      setProcessingTeamId(null);
+    }
+  };
+
+  // Bắt đầu giải đấu
+  const handleStartTournament = async (tournamentId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn bắt đầu giải đấu? Sau khi bắt đầu, các đội chờ duyệt sẽ bị từ chối và vòng 1 sẽ được tạo tự động.')) {
+      return;
+    }
+
+    try {
+      // Call API to start tournament
+      const response = await tournamentService.startTournament(tournamentId);
+      
+      showSuccess(`Giải đấu đã bắt đầu! ${response?.data?.matches_created || 0} trận đấu đã được tạo.`);
+      
+      // Reload tournaments to get updated status
+      loadTournaments();
+    } catch (error) {
+      console.error('❌ Failed to start tournament:', error);
+      showError(error?.response?.data?.message || 'Không thể bắt đầu giải đấu. Vui lòng kiểm tra đủ 2 đội đã được duyệt!');
+    }
+  };
+
+  // Get filtered tournaments based on quick filter and search
+  const getFilteredTournaments = () => {
+    let filtered = tournaments;
+
+    // Apply search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(t => {
+        const name = (t.name || t.tournament_name || '').toLowerCase();
+        const description = (t.description || '').toLowerCase();
+        const id = String(t.id);
+        
+        return name.includes(searchLower) || 
+               description.includes(searchLower) || 
+               id.includes(searchLower);
+      });
+    }
+
+    // Apply quick filter
+    switch (quickFilter) {
+      case 'live':
+        filtered = filtered.filter(t => t.status === 'live' || t.status === 'active');
+        break;
+      case 'upcoming':
+        filtered = filtered.filter(t => t.status === 'upcoming');
+        break;
+      case 'completed':
+        filtered = filtered.filter(t => t.status === 'completed');
+        break;
+      case 'cancelled':
+        filtered = filtered.filter(t => t.status === 'cancelled');
+        break;
+      case 'all':
+      default:
+        // No additional filtering needed
+        break;
+    }
+
+    return filtered;
+  };
+
+  // Get paginated tournaments
+  const getPaginatedTournaments = () => {
+    const filtered = getFilteredTournaments();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
+  };
+
+  // Handle page change
+  const handlePageChange = (page) => {
+    const maxPages = getCurrentTotalPages();
+    if (page >= 1 && page <= maxPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const filtered = getFilteredTournaments();
+    const calculatedTotalPages = Math.ceil(filtered.length / itemsPerPage);
+    
+    const pages = [];
+    const maxVisiblePages = 5;
+    
+    if (calculatedTotalPages <= maxVisiblePages) {
+      // Show all pages if total is less than max
+      for (let i = 1; i <= calculatedTotalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Show smart pagination
+      if (currentPage <= 3) {
+        // Near start
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(calculatedTotalPages);
+      } else if (currentPage >= calculatedTotalPages - 2) {
+        // Near end
+        pages.push(1);
+        pages.push('...');
+        for (let i = calculatedTotalPages - 3; i <= calculatedTotalPages; i++) pages.push(i);
+      } else {
+        // Middle
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(calculatedTotalPages);
+      }
+    }
+    
+    return pages;
+  };
+
+  // Get current total pages based on filtered data
+  const getCurrentTotalPages = () => {
+    const filtered = getFilteredTournaments();
+    return Math.ceil(filtered.length / itemsPerPage);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-dark-500 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-3xl font-bold text-white">
               Quản lý Giải đấu
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-gray-400 mt-1">
               Quản lý tất cả giải đấu esports
             </p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium">
-              ⬆️ Import
-            </button>
-            <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium">
-              ⬇️ Export
-            </button>
-            <button 
+            <Button 
+              variant="primary"
+              size="md"
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
             >
-              ➕ Tạo Giải đấu
-            </button>
+               Tạo Giải đấu
+            </Button>
           </div>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-            <span className="text-red-600 dark:text-red-400 text-xl">⚠️</span>
-            <div>
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                Lỗi tải dữ liệu
-              </h3>
-              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-            </div>
-          </div>
-        )}
+
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <Card hover padding="lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Tổng số</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm text-gray-400">Tổng số</p>
+                <p className="text-2xl font-bold text-white mt-1">
                   {stats.total}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                  +5 tháng này
-                </p>
               </div>
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <span className="text-2xl">📊</span>
+              <div className="p-3 bg-cyan-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-cyan-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                </svg>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <Card hover padding="lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Đang diễn ra</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm text-gray-400">Đang diễn ra</p>
+                <p className="text-2xl font-bold text-white mt-1">
                   {stats.active}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Live ngay bây giờ
                 </p>
               </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <span className="relative flex h-6 w-6 items-center justify-center">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
+              <div className="p-3 bg-emerald-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-emerald-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <Card hover padding="lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Sắp diễn ra</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm text-gray-400">Sắp diễn ra</p>
+                <p className="text-2xl font-bold text-white mt-1">
                   {stats.upcoming}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   30 ngày tới
                 </p>
               </div>
-              <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                <span className="text-2xl">⏳</span>
+              <div className="p-3 bg-amber-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                </svg>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <Card hover padding="lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Đã hoàn thành</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm text-gray-400">Đã hoàn thành</p>
+                <p className="text-2xl font-bold text-white mt-1">
                   {stats.completed}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Mùa giải này
                 </p>
               </div>
-              <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <span className="text-2xl">✅</span>
+              <div className="p-3 bg-sky-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-sky-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                  <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Tổng đội</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {stats.totalTeams.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Đã đăng ký</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Tổng trận</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {stats.totalMatches.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Đã diễn ra</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Giải thưởng</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                ${(stats.totalPrizePool / 1000000).toFixed(1)}M
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Đã phân phối</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <Card hover padding="lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Vấn đề</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
-                  {stats.issues}
+                <p className="text-sm text-gray-400">Tổng đội</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {stats.totalTeams.toLocaleString()}
                 </p>
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">Cần xử lý</p>
+                <p className="text-xs text-gray-400 mt-1">Đã đăng ký</p>
               </div>
-              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <span className="text-2xl">⚠️</span>
+              <div className="p-3 bg-indigo-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-indigo-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                </svg>
               </div>
             </div>
-          </div>
+          </Card>
+
+          <Card hover padding="lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400">Tổng trận</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {stats.totalMatches.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Đã diễn ra</p>
+              </div>
+              <div className="p-3 bg-rose-500/10 rounded-lg">
+                <svg className="w-8 h-8 text-rose-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </Card>
+
+          <Card hover padding="lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-400">Giải thưởng</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  ${(stats.totalPrizePool / 1000000).toFixed(1)}M
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Đã phân phối</p>
+              </div>
+              <div className="p-3 bg-gradient-gold/10 rounded-lg">
+                <svg className="w-8 h-8 text-[#C89B3C]" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 7a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1zm-3 3a1 1 0 100 2h.01a1 1 0 100-2H10zm-4 1a1 1 0 011-1h.01a1 1 0 110 2H7a1 1 0 01-1-1zm1-4a1 1 0 100 2h.01a1 1 0 100-2H7zm2 1a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm4-4a1 1 0 100 2h.01a1 1 0 100-2H13zM9 9a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zM7 8a1 1 0 000 2h.01a1 1 0 000-2H7z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </Card>
+
+          <Card hover padding="lg" className="border-orange-500/40 bg-gradient-to-br from-orange-500/5 to-red-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-300">Vấn đề</p>
+                <p className="text-2xl font-bold text-orange-400 mt-1">
+                  {stats.issues}
+                </p>
+                <p className="text-xs text-orange-300 mt-1">Cần xử lý ngay</p>
+              </div>
+              <div className="p-3 bg-orange-500/20 rounded-lg ring-2 ring-orange-500/30">
+                <svg className="w-8 h-8 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </Card>
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <Card padding="lg">
           <div className="space-y-4">
             {/* Search */}
             <div className="flex gap-3">
               <div className="flex-1">
                 <input
                   type="text"
-                  placeholder="🔍 Tìm kiếm giải đấu..."
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Tìm kiếm giải đấu..."
+                  className="w-full px-4 py-2 border border-primary-700/30 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                 />
               </div>
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => setShowFilters(!showFilters)}
-                className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 font-medium"
               >
-                🔽 Bộ lọc
-              </button>
+                Bộ lọc
+              </Button>
             </div>
 
             {/* Advanced Filters */}
             {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-primary-700/20">
                 <select
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={filters.game}
                   onChange={(e) => handleFilterChange('game', e.target.value)}
                 >
                   <option value="">Tất cả Game</option>
-                  <option value="lol">League of Legends</option>
-                  <option value="cs2">Counter-Strike 2</option>
-                  <option value="dota2">Dota 2</option>
-                  <option value="valorant">Valorant</option>
+                  {games.map((game) => (
+                    <option key={game.game_id} value={game.game_name}>
+                      {game.game_name}
+                    </option>
+                  ))}
                 </select>
 
                 <select
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  value={filters.season}
-                  onChange={(e) => handleFilterChange('season', e.target.value)}
-                >
-                  <option value="">Tất cả Mùa giải</option>
-                  <option value="spring-2024">Spring 2024</option>
-                  <option value="summer-2024">Summer 2024</option>
-                  <option value="fall-2024">Fall 2024</option>
-                  <option value="winter-2024">Winter 2024</option>
-                </select>
-
-                <select
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={filters.status}
                   onChange={(e) => handleFilterChange('status', e.target.value)}
                 >
                   <option value="">Tất cả Trạng thái</option>
-                  <option value="draft">Draft</option>
                   <option value="pending">Pending</option>
                   <option value="active">Active</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
 
-                <select
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                {/* <select
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-black focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={filters.format}
                   onChange={(e) => handleFilterChange('format', e.target.value)}
                 >
@@ -411,515 +849,220 @@ export const TournamentManagement = () => {
                   <option value="double-elim">Double Elimination</option>
                   <option value="round-robin">Round Robin</option>
                   <option value="swiss">Swiss</option>
-                </select>
+                </select> */}
               </div>
             )}
 
             {/* Quick Filters */}
             <div className="flex flex-wrap gap-2">
               {[
-                { id: 'all', label: 'Tất cả', color: 'blue' },
-                { id: 'live', label: '🔴 Live', color: 'green' },
-                { id: 'upcoming', label: '⏳ Sắp diễn ra', color: 'yellow' },
-                { id: 'completed', label: '✅ Hoàn thành', color: 'gray' },
-                { id: 'cancelled', label: '❌ Đã hủy', color: 'red' },
-                { id: 'issues', label: '⚠️ Có vấn đề', color: 'orange' },
-                { id: 'draft', label: '🔧 Draft', color: 'purple' },
-                { id: 'pending', label: '✏️ Chờ duyệt', color: 'indigo' }
+                { id: 'all', label: 'Tất cả', variant: 'primary' },
+                { id: 'live', label: 'Đang diễn ra', variant: 'success' },
+                { id: 'upcoming', label: 'Sắp diễn ra', variant: 'secondary' },
+                { id: 'completed', label: 'Hoàn thành', variant: 'secondary' },
+                { id: 'cancelled', label: 'Đã hủy', variant: 'danger' },
               ].map(filter => (
-                <button
+                <Button
                   key={filter.id}
+                  size="sm"
+                  variant={quickFilter === filter.id ? filter.variant : 'ghost'}
                   onClick={() => handleQuickFilter(filter.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    quickFilter === filter.id
-                      ? `bg-${filter.color}-600 text-white`
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
                 >
                   {filter.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Tournament Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <Card>
           {/* Table Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+          <div className="p-4 border-b border-primary-700/20 flex justify-between items-center">
             <div className="flex items-center gap-4">
               <input
                 type="checkbox"
                 checked={selectedTournaments.length === tournaments.length && tournaments.length > 0}
                 onChange={handleSelectAll}
-                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600"
+                className="w-4 h-4 rounded border-primary-700/30 bg-dark-300 text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {selectedTournaments.length > 0 && `${selectedTournaments.length} đã chọn`}
+              <span className="text-sm text-white font-medium">
+                {selectedTournaments.length > 0 
+                  ? `${selectedTournaments.length} đã chọn` 
+                  : `Tổng: ${tournaments.length} giải đấu`}
               </span>
               {selectedTournaments.length > 0 && (
-                <select className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                  <option>Bulk Actions</option>
-                  <option>Bulk Edit</option>
-                  <option>Export Selected</option>
-                  <option>Send Announcement</option>
-                  <option>Suspend All</option>
-                  <option>Delete All</option>
+                <select className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-black focus:ring-2 focus:ring-primary-500">
+                  <option> Bulk Actions</option>
+                  <option> Chỉnh sửa tất cả</option>
+                  <option> Xuất đã chọn</option>
+                  <option> Gửi thông báo</option>
+                  <option> Tạm dừng tất cả</option>
+                  <option> Xóa tất cả</option>
                 </select>
               )}
             </div>
-            <button className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-              ⚙️ Cột
+            <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              </svg>
+              Cột
             </button>
           </div>
 
-          {/* Loading State */}
           {loading && (
-            <div className="p-12 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-600"></div>
-              <p className="text-gray-600 dark:text-gray-400 mt-4">Đang tải...</p>
-            </div>
+            <Loading size="lg" text="Đang tải danh sách giải đấu..." />
           )}
 
-          {/* Tournament List */}
-          {!loading && tournaments.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      <input type="checkbox" className="w-4 h-4 rounded" />
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Giải đấu
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Game
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Mùa giải
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Trạng thái
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Đội/Trận
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Giải thưởng
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Thời gian
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                      Hành động
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {tournaments.map(tournament => (
-                    <tr key={tournament.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedTournaments.includes(tournament.id)}
-                          onChange={() => handleSelectTournament(tournament.id)}
-                          className="w-4 h-4 rounded"
-                        />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div>
-                          <div className="font-medium text-gray-900 dark:text-white">
-                            {tournament.name}
-                          </div>
-                          {tournament.featured && (
-                            <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 rounded">
-                              Nổi bật
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
-                        {tournament.game}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
-                        {tournament.season}
-                      </td>
-                      <td className="px-4 py-4">
-                        {getStatusBadge(tournament.status)}
-                        {tournament.status === 'live' && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Ngày {tournament.duration}
-                          </div>
-                        )}
-                        {tournament.status === 'upcoming' && tournament.daysUntil && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Còn {tournament.daysUntil} ngày
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-sm">
-                          <div className="text-gray-900 dark:text-white">
-                            {tournament.teams.current}/{tournament.teams.max} đội
-                          </div>
-                          <div className="text-gray-500 dark:text-gray-400">
-                            {tournament.matches.played} trận
-                          </div>
-                          {tournament.teams.pending && (
-                            <div className="text-yellow-600 dark:text-yellow-400 text-xs">
-                              {tournament.teams.pending} chờ duyệt
-                            </div>
-                          )}
-                          {tournament.teams.disputes && (
-                            <div className="text-red-600 dark:text-red-400 text-xs">
-                              ⚠️ {tournament.teams.disputes} tranh chấp
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-sm">
-                          <div className="text-gray-900 dark:text-white font-medium">
-                            ${tournament.prizePool.toLocaleString()}
-                          </div>
-                          <div className="text-gray-500 dark:text-gray-400 text-xs">
-                            {tournament.paidPercentage}% đã trả
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
-                        {tournament.startDate && (
-                          <div>
-                            <div>{tournament.startDate}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              {tournament.duration} ngày
-                            </div>
-                          </div>
-                        )}
-                        {!tournament.startDate && <span className="text-gray-400">TBD</span>}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="relative inline-block">
-                          <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xl px-2">
-                            ⋮
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {!loading && getFilteredTournaments().length > 0 && (
+            <TournamentTable
+              tournaments={getPaginatedTournaments()}
+              onViewRanking={handleViewRanking}
+              onCreateRanking={handleCreateRanking}
+              onDelete={handleDeleteTournament}
+              onOpenTeamApproval={handleOpenTeamApproval}
+              onStartTournament={handleStartTournament}
+              getStatusBadge={getStatusBadge}
+            />
           )}
 
           {/* Empty State */}
+          {!loading && tournaments.length > 0 && getFilteredTournaments().length === 0 && (
+            <div className="p-12 text-center">
+              <div className="text-6xl mb-4">🔍</div>
+              <h3 className="text-lg font-medium text-white mb-2">
+                Không tìm thấy giải đấu
+              </h3>
+              <p className="text-gray-400 mb-4">
+                Không có giải đấu nào phù hợp với bộ lọc "{quickFilter}"
+              </p>
+            </div>
+          )}
+
+          {/* No tournaments at all */}
           {!loading && tournaments.length === 0 && (
             <div className="p-12 text-center">
               <div className="text-6xl mb-4">🏆</div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-medium text-white mb-2">
                 Không tìm thấy giải đấu
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-gray-400 mb-4">
                 Không có giải đấu nào phù hợp với bộ lọc của bạn
               </p>
-              <button
+              <Button
+                variant="primary"
                 onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
               >
                 Tạo giải đấu đầu tiên
-              </button>
+              </Button>
             </div>
           )}
 
           {/* Pagination */}
           {!loading && tournaments.length > 0 && (
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Hiển thị 1-{tournaments.length} của {tournaments.length} giải đấu
+            <div className="p-4 border-t border-primary-700/20 flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                {(() => {
+                  const filtered = getFilteredTournaments();
+                  const start = (currentPage - 1) * itemsPerPage + 1;
+                  const end = Math.min(currentPage * itemsPerPage, filtered.length);
+                  return `Hiển thị ${filtered.length > 0 ? start : 0}-${end} của ${filtered.length} giải đấu`;
+                })()}
               </div>
               <div className="flex gap-2">
-                <button className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50" disabled>
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  disabled={currentPage === 1}
+                  onClick={() => handlePageChange(currentPage - 1)}
+                >
                   ← Trước
-                </button>
-                <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
-                  1
-                </button>
-                <button className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                  2
-                </button>
-                <button className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                  3
-                </button>
-                <button className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                </Button>
+                
+                {getPageNumbers().map((page, index) => (
+                  page === '...' ? (
+                    <span key={`ellipsis-${index}`} className="px-3 py-1.5 text-gray-400">
+                      ...
+                    </span>
+                  ) : (
+                    <Button
+                      key={page}
+                      size="sm"
+                      variant={currentPage === page ? 'primary' : 'ghost'}
+                      onClick={() => handlePageChange(page)}
+                    >
+                      {page}
+                    </Button>
+                  )
+                ))}
+                
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  disabled={currentPage === getCurrentTotalPages()}
+                  onClick={() => handlePageChange(currentPage + 1)}
+                >
                   Sau →
-                </button>
+                </Button>
               </div>
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Create Tournament Modal */}
+        {/* Create Tournament Modal (uses centralized component) */}
         {showCreateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Tạo Giải đấu Mới
-                </h2>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl"
-                >
-                  ×
-                </button>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-4 border-b border-primary-700/20 flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-white">Tạo Giải đấu Mới</h2>
+                <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-white text-2xl transition-colors">×</button>
               </div>
-              
               <div className="p-6">
-                <form className="space-y-6">
-                  {/* Step 1: Basic Info */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Bước 1: Thông tin cơ bản
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Tên giải đấu *
-                        </label>
-                        <input
-                          type="text"
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                          placeholder="VD: Spring Championship 2024"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Game *
-                          </label>
-                          <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                            <option value="">Chọn game</option>
-                            <option value="lol">League of Legends</option>
-                            <option value="cs2">Counter-Strike 2</option>
-                            <option value="dota2">Dota 2</option>
-                            <option value="valorant">Valorant</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Mùa giải *
-                          </label>
-                          <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                            <option value="">Chọn mùa giải</option>
-                            <option value="spring-2024">Spring 2024</option>
-                            <option value="summer-2024">Summer 2024</option>
-                            <option value="fall-2024">Fall 2024</option>
-                            <option value="winter-2024">Winter 2024</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Mô tả
-                        </label>
-                        <textarea
-                          rows={4}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                          placeholder="Mô tả về giải đấu..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Logo giải đấu
-                        </label>
-                        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
-                          <div className="text-4xl mb-2">📤</div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Kéo thả hoặc click để upload
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                            PNG, JPG (khuyến nghị: 512x512px)
-                          </p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Tags
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full text-sm">
-                            Official
-                          </button>
-                          <button type="button" className="px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 rounded-full text-sm">
-                            Featured
-                          </button>
-                          <button type="button" className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full text-sm">
-                            Amateur
-                          </button>
-                          <button type="button" className="px-3 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full text-sm">
-                            + Thêm tag
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step 2: Tournament Details */}
-                  <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Bước 2: Chi tiết giải đấu
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Thể thức *
-                        </label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="format" value="single" className="w-4 h-4" />
-                            <span className="text-gray-700 dark:text-gray-300">Single Elimination</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="format" value="double" className="w-4 h-4" defaultChecked />
-                            <span className="text-gray-700 dark:text-gray-300">Double Elimination</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="format" value="round-robin" className="w-4 h-4" />
-                            <span className="text-gray-700 dark:text-gray-300">Round Robin</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="format" value="swiss" className="w-4 h-4" />
-                            <span className="text-gray-700 dark:text-gray-300">Swiss System</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Số đội *
-                          </label>
-                          <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                            <option value="8">8 đội</option>
-                            <option value="16">16 đội</option>
-                            <option value="32">32 đội</option>
-                            <option value="64">64 đội</option>
-                            <option value="custom">Tùy chỉnh</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Khu vực
-                          </label>
-                          <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                            <option value="global">Toàn cầu</option>
-                            <option value="asia">Châu Á</option>
-                            <option value="europe">Châu Âu</option>
-                            <option value="americas">Châu Mỹ</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Địa điểm
-                        </label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="venue" value="online" className="w-4 h-4" defaultChecked />
-                            <span className="text-gray-700 dark:text-gray-300">Online</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="venue" value="offline" className="w-4 h-4" />
-                            <span className="text-gray-700 dark:text-gray-300">Offline</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="venue" value="hybrid" className="w-4 h-4" />
-                            <span className="text-gray-700 dark:text-gray-300">Hybrid</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step 3: Prize Pool */}
-                  <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Bước 3: Giải thưởng
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Tổng giải thưởng (USD) *
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                          placeholder="50000"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Phân phối giải thưởng
-                        </label>
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-3 gap-2">
-                            <input type="text" placeholder="🥇 1st" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                            <input type="number" placeholder="$20,000" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                            <input type="number" placeholder="40%" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <input type="text" placeholder="🥈 2nd" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                            <input type="number" placeholder="$12,000" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                            <input type="number" placeholder="24%" className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
-                          </div>
-                          <button type="button" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                            + Thêm hạng
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex gap-3 justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateModal(false)}
-                      className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="button"
-                      className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
-                    >
-                      Lưu nháp
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
-                    >
-                      Xuất bản →
-                    </button>
-                  </div>
-                </form>
+                <CreateTournamentForm onCreated={(res) => { setShowCreateModal(false); loadTournaments(); }} />
               </div>
-            </div>
+            </Card>
           </div>
         )}
       </div>
+
+      {/* Create Ranking Modal */}
+      <CreateRankingModal
+        show={showRankingModal}
+        onClose={() => setShowRankingModal(false)}
+        tournamentId={selectedTournamentId}
+        availableTeams={availableTeams}
+        rankingTeams={rankingTeams}
+        tournamentStatus={tournamentStatus}
+        saving={saving}
+        onAddTeam={handleAddTeam}
+        onRemoveTeam={handleRemoveTeam}
+        onStatusChange={setTournamentStatus}
+        onSave={handleSaveLeaderboard1}
+      />
+
+      {/* Team Approval Modal */}
+      <TeamApprovalModal
+        show={showTeamApprovalModal}
+        onClose={() => setShowTeamApprovalModal(false)}
+        tournament={selectedTournamentForApproval}
+        pendingTeams={pendingTeams}
+        processingTeamId={processingTeamId}
+        onApprove={handleApproveTeam}
+        onReject={handleRejectTeam}
+      />
+
+      {/* Leaderboard Modal */}
+      <LeaderboardModal
+        show={showLeaderboardModal}
+        onClose={() => setShowLeaderboardModal(false)}
+        tournamentId={selectedLeaderboardId}
+        leaderboard={leaderboard}
+        status={statusEditing}
+        saving={savingLeaderboard}
+        onStatusChange={setStatusEditing}
+        onFieldChange={handleChangeField}
+        onSave={handleSaveLeaderboard}
+      />
     </div>
   );
 };

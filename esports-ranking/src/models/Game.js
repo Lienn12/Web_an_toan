@@ -9,7 +9,7 @@ export default (sequelize) => {
       primaryKey: true
     },
     game_name: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(191),
       allowNull: false,
       unique: true
     },
@@ -31,6 +31,11 @@ export default (sequelize) => {
     createdAt: 'created_date',
     updatedAt: 'updated_date'
   });
+
+  // Associations
+  Game.associate = (models) => {
+    Game.hasMany(models.Season, { foreignKey: 'game_id', as: 'seasons' });
+  };
 
   return Game;
 };
