@@ -25,9 +25,9 @@ export default (sequelize) => {
     },
     created_by: {
       type: DataTypes.INTEGER,
-      allowNull: true, // Có thể là null nếu không cần theo dõi Admin
+      allowNull: true,
       references: {
-        model: 'Users', // Tên bảng 'User' của bạn
+        model: 'Users',
         key: 'id'
       }
     },
