@@ -38,7 +38,7 @@ export const findById = async (id) => {
     where: {
       tournament_id: id
     },
-    attributes: ['id', 'user_id', 'team_name', 'wallet_address', 'has_received_bye', 'status']
+    attributes: ['id', 'user_id', 'team_name', 'total_points', 'wallet_address', 'has_received_bye', 'status']
   });
 
   const result = tournament.get({ plain: true });
