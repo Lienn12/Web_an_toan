@@ -279,89 +279,167 @@ npx hardhat run scripts/deploy.js   # Terminal 2: Deploy contract
 Copy contract address vào file `.env` của cả backend và frontend.
 
 ---
+⚠️ I. Mô hình demo
 
-##  Tài khoản demo
+Hệ thống backend cung cấp hai middleware JWT:
 
-Sử dụng các tài khoản sau để đăng nhập:
+Middleware	Mô tả	Mục đích
+jwt_token.js	JWT chuẩn, bảo mật	Dùng trong hệ thống thật
+jwt_token1.js	JWT HS256 với secret yếu (ví dụ "weak123")	Dùng để demo tấn công
 
-| Role | Username | Password | Mô tả |
-|------|----------|----------|-------|
-| **Admin** | `admin` | `Admin12@` | Quản trị hệ thống, quản lý giải đấu, phân phối rewards |
-| **Team Manager** | `team` | `team1234@` | Quản lý đội tuyển, đăng ký giải đấu |
-| **Player** | `player1` | `player123` | Cầu thủ trong đội, xem lịch thi đấu |
-| **User** | `user1` | `user123@` | Người xem, theo dõi giải đấu |
+Khi API dùng middleware jwt_token1.js, hacker có thể tấn công bằng cách:
 
-###  Demo JWT Vulnerability
+Đọc JWT trả về từ backend
 
-#### Endpoint với lỗ hổng (sử dụng HS256 key yếu):
+Brute force khóa bí mật HS256
 
-```
-POST /api/auth/login-vulnerable
-```
+Ký lại token theo ý muốn (role=admin)
 
+Gửi token giả mạo để gọi API admin mà không bị 403
 
-#### Cách khai thác:
+🧪 II. Demo Chi Tiết – Các Bước Khai Thác
+1️⃣ Bước 1: Chạy file scripts_test.js
 
----
+Mục tiêu: Đọc JWT từ response HTTP, đặc biệt khi server đang chạy HTTP (không bật HTTPS) và cookie không phải httpOnly → JS có thể đọc được.
 
-##  Kết quả và giao diện
+Lệnh chạy:
 
-### 1. Trang chủ - Danh sách giải đấu
-![alt text](image.png)
-*Hiển thị các giải đấu đang diễn ra và sắp tới*
-
-### 2. Bảng xếp hạng Blockchain
-![Leaderboard](screenshots/leaderboard.png)
-*Bảng xếp hạng được lưu trữ trên blockchain, có hash để verify*
-
-### 3. Dashboard Admin
-![alt text](image-1.png)
-*Quản lý giải đấu, cập nhật kết quả, phân phối rewards*
-
-### 4. Team Manager - Quản lý đội tuyển
-![alt text](image-2.png)
-*Quản lý thành viên, đăng ký giải đấu, xem lịch sử trận đấu*
-
-### 5. JWT Security Demo
-
-*Demo crack JWT HS256 với key yếu - So sánh token secure vs vulnerable*
+node scripts_test.js
 
 
-##  Bảo mật JWT - Phân tích
+scripts_test.js sẽ:
 
-### Lỗ hổng JWT HS256
+Gửi request HTTP tới server
 
-**File demo**: `src/middlewares/jwt_token1.js`
+Lấy header và body phản hồi
 
-#### Vấn đề:
-- Sử dụng secret key yếu: `"123456"`
-- Dễ bị brute-force
-- Attacker có thể tạo token giả mạo với role cao hơn
+Trích xuất JWT từ JSON hoặc Cookie
 
-#### Cách phòng tránh:
- Sử dụng secret key phức tạp (>256 bit)  
- Sử dụng RS256 (asymmetric) thay vì HS256  
- Implement token rotation  
- Thêm claims validation (exp, iat, aud, iss)  
-✅ Rate limiting cho login attempts  
+In ra token mà backend trả về
 
-###  Implementation an toàn
+Ví dụ output:
 
-**File secure**: `src/middlewares/jwt_token.js`
+Received JWT:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-```javascript
-// Secret key mạnh (256-bit)
-const JWT_SECRET = crypto.randomBytes(32).toString('hex');
 
-// Add more claims
-const token = jwt.sign(
-  { 
-    userId: user.id, 
-    role: user.role,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // 24h
-  }, 
-  JWT_SECRET,
-  { algorithm: 'HS256' }
-);
-```
+👉 Đây là token hacker sẽ dò khóa.
+
+2️⃣ Bước 2: Brute Force JWT để tìm khóa bí mật
+
+Chạy script:
+
+node find_key.js
+
+
+find_key.js chứa thuật toán brute-force dictionary cho HS256:
+
+Lấy JWT từ output bước 1
+
+Tách token ra thành header/payload/signature
+
+Dò tất cả key trong dictionary (weak keys, “admin”, “123456”, “weak123”,…)
+
+Với mỗi key → tính HMAC SHA256 → so với signature
+
+Ví dụ output:
+
+Found matching secret key: weak123
+
+
+🎯 Hacker đã tìm được khóa bí mật của backend!
+
+3️⃣ Bước 3: Tạo JWT giả mạo (Forge Token)
+
+Hacker sửa payload:
+
+{
+  "id": 1,
+  "email": "hacker@example.com",
+  "role": "admin"
+}
+
+
+Sau đó ký lại:
+
+node forge_token.js
+
+
+Kết quả:
+
+Forged JWT:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+
+Token này có role: admin nhưng backend KHÔNG phát hiện được vì:
+
+Backend dùng HS256
+
+Secret key yếu (weak123)
+
+Hacker đã tìm ra key
+
+4️⃣ Bước 4: Gửi token giả mạo lên API admin
+curl -X GET http://localhost:8081/api/admin/secret \
+  -H "Authorization: Bearer eyJhbGciOi...(token forge)"
+
+❗Kết quả:
+200 OK
+{
+  "message": "Welcome admin!"
+}
+
+
+🎉 Leo quyền thành công – bypass toàn bộ phân quyền, dù hacker chỉ là user bình thường.
+
+🛡️ III. Test lại với hệ thống đã được bảo vệ
+
+Sau khi triển khai hệ thống đúng chuẩn bảo mật, nhóm thử tấn công lại.
+
+1️⃣ Khi bật HTTPS
+
+JavaScript không thể sniff request/response nếu website chạy qua HTTPS bảo mật.
+
+2️⃣ Khi JWT được set với httpOnly cookie
+
+Ví dụ:
+
+res.cookie("accessToken", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict"
+});
+
+
+Khi đó:
+
+JS không thể đọc cookie
+
+Không thể lấy JWT từ document.cookie
+
+Không thể chạy brute-force vì hacker không có token để phân tích
+
+Khi chạy lại scripts_test.js:
+
+document.cookie → "" 
+Cannot read JWT from client
+
+
+💡 Đây là lý do mọi ứng dụng nên dùng httpOnly cookie thay vì localStorage để lưu JWT.
+
+🚀 IV. Kết luận phần demo
+Trạng thái hệ thống	Có thể tấn công?	Lý do
+JWT HS256 + secret yếu + HTTP + cookie không httpOnly	✔️ Crack được	Hacker đọc token → brute force → forge token
+JWT HS256 + secret mạnh + HTTPS + cookie httpOnly	❌ Không tấn công được	Không đọc được JWT → không thể brute force
+JWT RS256 (public/private key)	❌ Không thể brute-force	Không có private key → không ký được token
+🎯 Khuyến nghị bảo mật
+
+Không dùng HS256 với secret đơn giản
+
+Dùng RS256 (asymmetric)
+
+Luôn set cookie httpOnly + secure
+
+Luôn bật HTTPS
+
+Không bao giờ lưu JWT trên localStorage
